@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<modification>
+  <name>Module downloader</name>
+  <code>module_downloader</code>
+  <version>1.0</version>
+  <author>Ari</author>
+  <link>/</link>
+  <file path="admin/model/setting/modification.php">
+    <operation>
+      <search><![CDATA[class ModelSettingModification extends Model {]]></search>
+      <add position="after"><![CDATA[
+      public function getModificationByInstallId($install_id) {
+		$query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "modification` WHERE `extension_install_id` = '" . (int)$install_id . "'");
+
+		return $query->row;
+	}
+      ]]></add>
+    </operation>
+  </file>
+  <file path="admin/controller/marketplace/installer.php">
+    <operation>
+      <search><![CDATA[public function history() {]]></search>
+      <add position="before"><![CDATA[
+          public function download() {
+            $install_id = $this->request->get['install_id'];
+            $filename = $this->request->get['filename'];
+          
+    	    $this->load->model('setting/extension');
+    	    $this->load->model('setting/modification');
+    	    
+    	    $files = $this->model_setting_extension->getExtensionPathsByExtensionInstallId($install_id);
+    	    
+    	    $modification = $this->model_setting_modification->getModificationByInstallId($install_id);
+    	    
+    	    if ($modification) {
+    	        $install_xml = true;
+    	        file_put_contents(DIR_IMAGE . 'download/' . 'install.xml', $modification['xml']);
+    	    } else {
+    	        $install_xml = false;
+    	    }
+    	    
+    	    $dir = str_replace('admin/' , '', DIR_APPLICATION);
+    	    
+    	    $zip = new ZipArchive(); //Создаём объект для работы с ZIP-архивами
+            $zip->open(DIR_IMAGE . 'download/' . $filename, ZIPARCHIVE::CREATE); //Открываем (создаём) архив archive.zip
+            
+            
+            foreach ($files as $file) {
+                if (!stripos($file['path'], '.')) {
+                    $zip->addEmptyDir('upload/' . $file['path']);
+                }
+            }
+            
+            foreach ($files as $file) {
+                if (stripos($file['path'], '.')) {
+                    $zip->addFile($dir . $file['path'], 'upload/' . $file['path']);
+                }
+            }
+            
+            if ($install_xml) {
+                $zip->addFile(DIR_IMAGE . 'download/' . 'install.xml', 'install.xml');
+            }
+            
+            $zip->close(); //Завершаем работу с архивом
+            if (file_exists(DIR_IMAGE . 'download/' . 'install.xml')) {
+                unlink(DIR_IMAGE . 'download/' . 'install.xml');
+            }
+            
+            header('Location: ' . HTTPS_CATALOG . 'image/download/' . $filename);
+            exit();
+    	}
+      ]]></add>
+    </operation>
+    <operation>
+      <search><![CDATA['filename'             => $result['filename'],]]></search>
+      <add position="after"><![CDATA['download' => $this->url->link('marketplace/installer/download', 'user_token=' . $this->session->data['user_token'] . '&install_id=' . $result['extension_install_id'] . '&filename=' . $result['filename'], true),]]></add>
+    </operation>
+  </file>
+  <file path="admin/view/template/marketplace/installer_history.twig">
+    <operation>
+      <search><![CDATA[<td class="text-right"><button type="button" value="{{ history.extension_install_id }}" data-loading="{{ text_loading }}" data-toggle="tooltip" title="{{ button_uninstall }}" class="btn btn-danger"><i class="fa fa-trash-o"></i></button></td>]]></search>
+      <add position="replace"><![CDATA[
+        <td class="text-right">
+            <button type="button" value="{{ history.extension_install_id }}" data-loading="{{ text_loading }}" data-toggle="tooltip" title="{{ button_uninstall }}" class="btn btn-danger"><i class="fa fa-trash-o"></i></button>
+            <a href="{{ history.download }}" target="_blank" class="btn btn-success" ata-toggle="tooltip" title="{{ button_download }}"><i class="fa fa-download"></i></a>
+        </td>
+      ]]></add>
+    </operation>
+  </file>
+</modification>
